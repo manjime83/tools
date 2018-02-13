@@ -1,11 +1,11 @@
 package com.dubai.utils;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.Charset;
+import java.util.Enumeration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
@@ -18,51 +18,53 @@ import org.apache.commons.io.IOUtils;
 public class Base64Util {
 
 	public static void main(String[] args) throws IOException {
-		if (args[0].startsWith("-e")) {
-			String name = FilenameUtils.getName(args[1]) + ".txt";
-			InputStream input = new FileInputStream(args[1]);
-			OutputStream output = new Base64OutputStream(new FileOutputStream(name));
-			IOUtils.copy(input, output);
-			output.close();
-			input.close();
-			System.out.println(args[1] + " encoded!");
+		if (args[0].equals("-e")) {
+			FileOutputStream fos = new FileOutputStream(FilenameUtils.getBaseName(args[1]) + ".b64.zip");
+			ZipOutputStream zos = new ZipOutputStream(fos, Charset.forName("UTF-8"));
+			ZipFile zip = new ZipFile(args[1], Charset.forName("UTF-8"));
 
-			if (args[0].startsWith("-ez")) {
-				FileOutputStream zip = new FileOutputStream(name + ".zip");
-				ZipOutputStream zos = new ZipOutputStream(zip, Charset.forName("UTF-8"));
-				ZipEntry zipEntry = new ZipEntry(name);
-				try {
-					zos.putNextEntry(zipEntry);
-					IOUtils.copy(new FileInputStream(name), zos);
-					zos.closeEntry();
-				} catch (IOException e) {
-					throw new RuntimeException(e);
+			Enumeration<? extends ZipEntry> entries = zip.entries();
+			while (entries.hasMoreElements()) {
+				ZipEntry inEntry = entries.nextElement();
+				ZipEntry outEntry = new ZipEntry(inEntry.getName());
+				zos.putNextEntry(outEntry);
+				if (!inEntry.isDirectory()) {
+					ByteArrayOutputStream b64 = new ByteArrayOutputStream();
+					IOUtils.copy(zip.getInputStream(inEntry), new Base64OutputStream(b64));
+					IOUtils.copy(new ByteArrayInputStream(b64.toByteArray()), zos);
+					b64.close();
 				}
-				zos.close();
-				zip.close();
-				System.out.println(name + " compressed!");
-			}
-		} else if (args[0].startsWith("-d")) {
-			String name;
-			if (args[0].startsWith("-dz")) {
-				ZipFile zip = new ZipFile(args[1], Charset.forName("UTF-8"));
-				ZipEntry zipEntry = zip.entries().nextElement();
-				name = zipEntry.getName();
-				FileOutputStream fos = new FileOutputStream(name);
-				IOUtils.copy(zip.getInputStream(zipEntry), fos);
-				fos.close();
-				zip.close();
-				System.out.println(args[1] + " uncompressed!");
-			} else {
-				name = args[1];
+				zos.closeEntry();
 			}
 
-			InputStream input = new Base64InputStream(new FileInputStream(name));
-			OutputStream output = new FileOutputStream(FilenameUtils.getBaseName(name));
-			IOUtils.copy(input, output);
-			output.close();
-			input.close();
-			System.out.println(name + " decoded!");
+			zip.close();
+			zos.close();
+			fos.close();
+			System.out.println(args[1] + " encoded!");
+		} else if (args[0].startsWith("-d")) {
+			FileOutputStream fos = new FileOutputStream(
+					FilenameUtils.getBaseName(FilenameUtils.getBaseName(args[1])) + ".zip");
+			ZipOutputStream zos = new ZipOutputStream(fos, Charset.forName("UTF-8"));
+			ZipFile zip = new ZipFile(args[1], Charset.forName("UTF-8"));
+
+			Enumeration<? extends ZipEntry> entries = zip.entries();
+			while (entries.hasMoreElements()) {
+				ZipEntry inEntry = entries.nextElement();
+				ZipEntry outEntry = new ZipEntry(inEntry.getName());
+				zos.putNextEntry(outEntry);
+				if (!inEntry.isDirectory()) {
+					ByteArrayOutputStream b64 = new ByteArrayOutputStream();
+					IOUtils.copy(new Base64InputStream(zip.getInputStream(inEntry)), b64);
+					IOUtils.copy(new ByteArrayInputStream(b64.toByteArray()), zos);
+					b64.close();
+				}
+				zos.closeEntry();
+			}
+
+			zip.close();
+			zos.close();
+			fos.close();
+			System.out.println(args[1] + " decoded!");
 		} else {
 			System.out.println("usage: java -jar base64util.jar [-e|-d] <filename>");
 		}
